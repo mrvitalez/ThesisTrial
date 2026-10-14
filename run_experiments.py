@@ -12,7 +12,9 @@ Outputs (in --out, default ./results):
     beta_sweep.csv            final learning gain vs beta per topology
     fig_networks.png          drawing of every topology
     fig_learning_curves.png   fraction in I over discussion rounds
-    fig_sei_<topology>.png    S, E, I compartments for one topology
+    sei_counts_vs_model.csv   S/E/I counts per round: network vs. SEI model
+    fig_sei_<topology>.png    S, E, I counts on one network vs. the SEI model
+    fig_sei_all_networks.png  the same comparison for every topology in one grid
     fig_beta_sweep.png        final fraction in I vs transmission probability
 """
 
@@ -64,6 +66,80 @@ def summarise(sims: np.ndarray, n: int, p: SEIParams) -> dict:
         "t80_median": np.nanmedian(t80) if np.isfinite(t80).any() else np.nan,
         "p_reach_80": np.isfinite(t80).mean(),
     }
+
+
+COMPARTMENTS = [("S", "Susceptible", PALETTE[0]),
+                ("E", "Exposed", PALETTE[1]),
+                ("I", "Infected", PALETTE[2])]
+
+
+def average_degree(name: str, n: int, kw: dict, samples: int = 50) -> float:
+    """Mean degree averaged over samples, since random topologies vary per draw."""
+    return float(np.mean([network_metrics(build_network(name, n, seed=s, **kw))["mean_degree"]
+                          for s in range(samples)]))
+
+
+def _draw_comparison(ax, sims: np.ndarray, model: np.ndarray, rounds: np.ndarray):
+    for c, (_, label, color) in enumerate(COMPARTMENTS):
+        v = sims[:, :, c]
+        ax.fill_between(rounds, np.percentile(v, 2.5, 0), np.percentile(v, 97.5, 0),
+                        color=color, alpha=0.12, linewidth=0)
+        ax.plot(rounds, v.mean(0), color=color, label=f"{label} (network)")
+        ax.plot(rounds, model[:, c], color=color, linestyle="--", linewidth=1.5,
+                label=f"{label} (SEI model)")
+
+
+def compare_with_sei_model(all_sims: dict, n: int, p: SEIParams, kw: dict,
+                           out: Path) -> pd.DataFrame:
+    """Number of students in S, E and I per round on each network, next to the
+    classic well-mixed SEI model with the same mean number of contacts.
+
+    Writes one figure per topology plus a combined grid; returns the counts table.
+    """
+    rounds = np.arange(p.steps + 1)
+    rows = []
+    grid_fig, grid_axes = plt.subplots(2, 4, figsize=(16, 8), sharex=True, sharey=True)
+    for ax_grid, name in zip(grid_axes.flat, TOPOLOGIES):
+        sims = all_sims[name]
+        k = average_degree(name, n, kw)
+        model = mean_field(n, k, p)
+        for t in rounds:
+            row = {"topology": name, "mean_degree": k, "round": t}
+            for c, (comp, _, _) in enumerate(COMPARTMENTS):
+                row[f"{comp}_network"] = sims[:, t, c].mean()
+                row[f"{comp}_network_lo95"] = np.percentile(sims[:, t, c], 2.5)
+                row[f"{comp}_network_hi95"] = np.percentile(sims[:, t, c], 97.5)
+                row[f"{comp}_model"] = model[t, c]
+            rows.append(row)
+
+        fig, ax = plt.subplots(figsize=(8, 5.6))
+        _draw_comparison(ax, sims, model, rounds)
+        ax.set_xlabel("Peer discussion round")
+        ax.set_ylabel("Number of students")
+        ax.set_ylim(0, n * 1.02)
+        ax.set_title(f"{LABELS[name]}: S → E → I on the network vs. SEI model "
+                     f"(mean contacts = {k:.1f})", color=INK)
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), fontsize=8, ncol=3)
+        fig.tight_layout()
+        fig.savefig(out / f"fig_sei_{name}.png", dpi=150)
+        plt.close(fig)
+
+        _draw_comparison(ax_grid, sims, model, rounds)
+        ax_grid.set_title(f"{LABELS[name]} (k = {k:.1f})", color=INK)
+        ax_grid.set_ylim(0, n * 1.02)
+
+    for ax in grid_axes[1]:
+        ax.set_xlabel("Peer discussion round")
+    for ax in grid_axes[:, 0]:
+        ax.set_ylabel("Number of students")
+    handles, labels = grid_axes.flat[0].get_legend_handles_labels()
+    grid_fig.legend(handles, labels, loc="lower center", ncol=6, fontsize=9)
+    grid_fig.suptitle("Susceptible → Exposed → Infected counts: network simulation (solid, 95% band) "
+                      "vs. well-mixed SEI model (dashed)", color=INK)
+    grid_fig.tight_layout(rect=(0, 0.05, 1, 0.97))
+    grid_fig.savefig(out / "fig_sei_all_networks.png", dpi=150)
+    plt.close(grid_fig)
+    return pd.DataFrame(rows)
 
 
 def plot_networks(n: int, kw: dict, out: Path):
@@ -153,25 +229,9 @@ def main():
     fig.savefig(out / "fig_learning_curves.png", dpi=150)
     plt.close(fig)
 
-    # --- S/E/I compartments for one example topology --------------------------
-    example = "small_groups"
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-    for c, (comp, label, color) in enumerate(
-            [("S", "Susceptible (not yet learned)", PALETTE[0]),
-             ("E", "Exposed (heard, not internalised)", PALETTE[1]),
-             ("I", "Infected (understands, can explain)", PALETTE[2])]):
-        v = all_sims[example][:, :, c] / a.n
-        ax.fill_between(rounds, np.percentile(v, 2.5, 0), np.percentile(v, 97.5, 0),
-                        color=color, alpha=0.12, linewidth=0)
-        ax.plot(rounds, v.mean(0), color=color, label=label)
-    ax.set_xlabel("Peer discussion round")
-    ax.set_ylabel("Fraction of class")
-    ax.set_ylim(0, 1.02)
-    ax.set_title(f"SEI compartments — {LABELS[example]}", color=INK)
-    ax.legend(loc="center right", fontsize=9)
-    fig.tight_layout()
-    fig.savefig(out / f"fig_sei_{example}.png", dpi=150)
-    plt.close(fig)
+    # --- S -> E -> I counts per topology: network simulation vs. SEI model ----
+    compare = compare_with_sei_model(all_sims, a.n, p, kw, out)
+    compare.to_csv(out / "sei_counts_vs_model.csv", index=False, float_format="%.2f")
 
     # --- sweep transmission probability beta ----------------------------------
     betas = np.round(np.linspace(0.02, 0.5, 13), 3)

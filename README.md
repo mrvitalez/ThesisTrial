@@ -53,8 +53,13 @@ Outputs go to `results/`:
   median rounds to reach 80% understanding).
 - `timeseries.csv`: mean and 95% interval of S/E/I for every round.
 - `beta_sweep.csv`: final learning as a function of β.
-- Figures: `fig_networks.png`, `fig_learning_curves.png`,
-  `fig_sei_small_groups.png` and `fig_beta_sweep.png`.
+- `sei_counts_vs_model.csv`: number of students in S, E and I at every round
+  for each network (mean and 95% interval), next to the classic well-mixed SEI
+  model given the same mean number of contacts.
+- Figures: `fig_networks.png`, `fig_learning_curves.png`, `fig_beta_sweep.png`,
+  `fig_sei_<topology>.png` (one per network: S → E → I counts from the
+  simulation as solid lines, the SEI model as dashed lines) and
+  `fig_sei_all_networks.png` (all eight comparisons in one grid).
 
 ## Using it in your own scripts
 
