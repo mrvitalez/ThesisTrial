@@ -9,7 +9,7 @@ classroom during Peer Instruction (PI), using a **Susceptible–Exposed–Infect
 | Compartment | Meaning in the classroom |
 |---|---|
 | **S** (Susceptible) | Student does not yet understand the concept (wrong answer in the vote) |
-| **E** (Exposed) | Student has heard a correct explanation from a peer but has not internalised it yet |
+| **E** (Exposed) | Student has heard a correct explanation from a peer or a teacher but has not internalised it yet |
 | **I** (Infected) | Student understands the concept and can convince others |
 
 Each time step is one peer-discussion round. Updates are synchronous:
