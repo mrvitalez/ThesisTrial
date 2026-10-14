@@ -26,3 +26,12 @@ def test_complete_graph_full_learning():
     g = build_network("complete", 30)
     r = simulate(g, SEIParams(beta=0.5, sigma=1.0, initial_correct=0.1, steps=10), rng=0)
     assert r.I[-1] == 30
+
+
+def test_seir_learning_lost():
+    g = build_network("complete", 30)
+    p = SEIParams(beta=0.5, sigma=1.0, gamma=0.2, initial_correct=0.1, steps=40)
+    r = simulate(g, p, rng=0)
+    assert np.all(r.S + r.E + r.I + r.R == 30)
+    assert np.all(np.diff(r.R) >= 0)  # relearn = 0: R is absorbing
+    assert r.I.max() > r.I[-1]        # understanding peaks then declines

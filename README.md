@@ -74,6 +74,20 @@ sims = monte_carlo(lambda s: build_network("small_world", 40, seed=s, k=4, p=0.2
                    SEIParams(), runs=500)
 ```
 
+## SEI vs. SEIR (learning can be lost)
+
+Setting `gamma > 0` adds the move **I → R**: a student who understood loses it
+after about `1/gamma` rounds and stops convincing others. With `relearn > 0`
+the model becomes SEIRS, where lost students can be convinced again.
+
+```bash
+python compare_sei_seir.py --gamma 0.05        # outputs go to results/seir/
+```
+
+This writes one S/E/I/R chart per network (SEI's Infected curve is drawn
+dashed for reference), a grid of all eight, a sweep of final understanding
+against `gamma`, and CSV tables.
+
 ## Notes for the thesis methodology
 
 - **Mean degree confound.** The topologies don't all have the same number of
